@@ -11,14 +11,14 @@ const supabase = createClient(
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([])
   const [content, setContent] = useState('')
+  const [author, setAuthor] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function fetchPosts() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('posts')
       .select('*')
       .order('created_at', { ascending: false })
-    if (error) console.error('불러오기 에러:', error)
     setPosts(data || [])
   }
 
@@ -27,10 +27,9 @@ export default function Home() {
   }, [])
 
   async function handleSubmit() {
-    if (!content.trim()) return
+    if (!content.trim() || !author.trim()) return
     setLoading(true)
-    const { error } = await supabase.from('posts').insert([{ content }])
-    if (error) console.error('저장 에러:', error)
+    await supabase.from('posts').insert([{ content, author }])
     setContent('')
     await fetchPosts()
     setLoading(false)
@@ -41,49 +40,96 @@ export default function Home() {
     await fetchPosts()
   }
 
+  // 날짜별로 묶기
+  const groupedByDate = posts.reduce((acc: any, post) => {
+    const date = new Date(post.created_at).toLocaleDateString('ko-KR', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    })
+    if (!acc[date]) acc[date] = []
+    acc[date].push(post)
+    return acc
+  }, {})
+
+  // 날짜 안에서 이름별로 묶기
+  const groupByAuthor = (posts: any[]) => {
+    return posts.reduce((acc: any, post) => {
+      const name = post.author || '익명'
+      if (!acc[name]) acc[name] = []
+      acc[name].push(post)
+      return acc
+    }, {})
+  }
+
   return (
-    <main className="max-w-xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-center mb-2">🙏 감사 일기</h1>
-      <p className="text-center text-gray-500 mb-8">오늘 감사한 일을 적어보세요</p>
+    <main style={{ background: '#f4f7f4', minHeight: '100vh' }} className="pb-12">
+      <div className="max-w-xl mx-auto px-4 pt-10">
 
-      <div className="mb-8">
-        <textarea
-          className="w-full border rounded-xl p-4 text-base resize-none focus:outline-none focus:ring-2 focus:ring-yellow-300"
-          rows={4}
-          placeholder="오늘 감사한 일은 무엇인가요? ✨"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-        />
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="mt-2 w-full bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-3 rounded-xl transition"
-        >
-          {loading ? '저장 중...' : '✏️ 감사 일기 쓰기'}
-        </button>
-      </div>
+        {/* 헤더 */}
+        <div className="text-center mb-10">
+          <h1 style={{ color: '#4a6741' }} className="text-3xl font-bold mb-1">🌿 감사 일기</h1>
+          <p style={{ color: '#7a9e76' }} className="text-sm">오늘 감사한 일을 적어보세요</p>
+        </div>
 
-      <div className="space-y-4">
-        {posts.length === 0 && (
-          <p className="text-center text-gray-400">아직 글이 없어요. 첫 번째 감사 일기를 써보세요! 🌱</p>
+        {/* 글쓰기 */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 2px 12px rgba(74,103,65,0.08)' }} className="mb-8">
+          <input
+            style={{ border: '1px solid #d4e4d0', borderRadius: '10px', padding: '10px 14px', width: '100%', marginBottom: '10px', outline: 'none', color: '#4a6741' }}
+            placeholder="이름을 입력하세요 🌱"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+          />
+          <textarea
+            style={{ border: '1px solid #d4e4d0', borderRadius: '10px', padding: '10px 14px', width: '100%', resize: 'none', outline: 'none', color: '#333' }}
+            rows={4}
+            placeholder="오늘 감사한 일은 무엇인가요? ✨"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{ marginTop: '10px', width: '100%', background: '#4a6741', color: 'white', border: 'none', borderRadius: '10px', padding: '12px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}
+          >
+            {loading ? '저장 중...' : '✏️ 감사 일기 쓰기'}
+          </button>
+        </div>
+
+        {/* 글 목록 - 날짜별 */}
+        {Object.keys(groupedByDate).length === 0 && (
+          <p style={{ color: '#7a9e76' }} className="text-center text-sm">아직 글이 없어요. 첫 번째 감사 일기를 써보세요! 🌱</p>
         )}
-        {posts.map((post) => (
-          <div key={post.id} className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <p className="text-gray-800 whitespace-pre-wrap">{post.content}</p>
-            <div className="flex justify-between items-center mt-3">
-              <span className="text-xs text-gray-400">
-                {new Date(post.created_at).toLocaleDateString('ko-KR', {
-                  year: 'numeric', month: 'long', day: 'numeric',
-                  hour: '2-digit', minute: '2-digit'
-                })}
-              </span>
-              <button
-                onClick={() => handleDelete(post.id)}
-                className="text-xs text-red-400 hover:text-red-600"
-              >
-                삭제
-              </button>
+
+        {Object.entries(groupedByDate).map(([date, datePosts]: any) => (
+          <div key={date} className="mb-8">
+            {/* 날짜 헤더 */}
+            <div style={{ color: '#4a6741', fontWeight: 'bold', fontSize: '14px', marginBottom: '12px', paddingLeft: '4px' }}>
+              📅 {date}
             </div>
+
+            {/* 이름별로 묶기 */}
+            {Object.entries(groupByAuthor(datePosts)).map(([name, authorPosts]: any) => (
+              <div key={name} className="mb-4">
+                <div style={{ color: '#7a9e76', fontSize: '13px', fontWeight: '600', marginBottom: '6px', paddingLeft: '4px' }}>
+                  🌿 {name}
+                </div>
+                {authorPosts.map((post: any) => (
+                  <div key={post.id} style={{ background: 'white', borderRadius: '12px', padding: '14px 16px', marginBottom: '8px', boxShadow: '0 1px 6px rgba(74,103,65,0.07)' }}>
+                    <p style={{ color: '#333', fontSize: '15px', lineHeight: '1.6' }}>{post.content}</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+                      <span style={{ color: '#aaa', fontSize: '12px' }}>
+                        {new Date(post.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <button
+                        onClick={() => handleDelete(post.id)}
+                        style={{ color: '#c9a', fontSize: '12px', background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         ))}
       </div>
